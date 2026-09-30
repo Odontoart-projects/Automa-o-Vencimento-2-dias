@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="referrer" content="no-referrer" />
+  <meta http-equiv="Content-Security-Policy"
+    content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" />
+  <title>Odontoart • 2 DIAS ANTES DO VENCIMENTO</title>
+  <link rel="stylesheet" href="./styles.css?v=20260928-1520" />
+</head>
+
+<body>
+  <header class="topbar">
+    <div class="shell topbar-inner">
+      <div class="brand" aria-label="Odontoart Tratador de Campanhas">
+        <div class="brand-mark" aria-hidden="true">O</div>
+        <div>
+          <strong>Odontoart</strong>
+          <span>COBRANÇA - PF - 2 DIAS ANTES DO VENCIMENTO</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="shell page">
+    <section class="hero hero-single">
+      <div>
+        <p class="eyebrow">Automação interna</p>
+        <h1>Prepare as bases de campanha em poucos cliques.</h1>
+        <p class="hero-copy">Importe os relatórios brutos de Ortodontia e Operadora. A aplicação valida os telefones,
+          mantém repetições, ordena por nome e gera o CSV no padrão de disparo.</p>
+      </div>
+    </section>
+
+    <section class="panel upload-panel" aria-labelledby="import-title">
+      <div class="section-heading">
+        <div>
+          <p class="step">1. Importação</p>
+          <h2 id="import-title">Selecione as planilhas brutas</h2>
+        </div>
+        <button id="clearButton" class="button button-ghost" type="button" disabled>Limpar</button>
+      </div>
+
+      <label id="dropzone" class="dropzone" for="fileInput" tabindex="0">
+        <input id="fileInput" type="file" accept=".xls,.csv,.html,.htm" multiple hidden />
+        <div class="drop-icon" aria-hidden="true">↑</div>
+        <strong>Arraste os arquivos aqui ou clique para selecionar</strong>
+        <span>Relatórios .xls da campanha e arquivos .csv • até 15 MB por arquivo</span>
+      </label>
+
+      <div id="fileList" class="file-list" aria-live="polite"></div>
+      <div id="globalAlert" class="alert" role="status" hidden></div>
+    </section>
+
+    <section class="panel rules-panel" aria-labelledby="rules-title">
+      <div class="section-heading">
+        <div>
+          <p class="step">2. Regras</p>
+          <h2 id="rules-title">Tratamentos aplicados</h2>
+        </div>
+        <span class="badge">Configuração atual</span>
+      </div>
+      <div class="rules-grid">
+        <article class="rule-card">
+          <span class="rule-number">01</span>
+          <div><strong>Ordem alfabética</strong>
+            <p>Resultado organizado pelo nome do cliente.</p>
+          </div>
+        </article>
+        <article class="rule-card">
+          <span class="rule-number">02</span>
+          <div><strong>Validação de telefone</strong>
+            <p>Caracteres são removidos e números com menos de 11 dígitos são descartados.</p>
+          </div>
+        </article>
+        <article class="rule-card">
+          <span class="rule-number">03</span>
+          <div><strong>Repetidos preservados</strong>
+            <p>Clientes e telefones repetidos não são deduplicados.</p>
+          </div>
+        </article>
+        <article class="rule-card">
+          <span class="rule-number">04</span>
+          <div><strong>Uma linha por telefone</strong>
+            <p>Telefone 1, 2 e 3 válidos geram registros separados.</p>
+          </div>
+        </article>
+      </div>
+      <div class="mapping-note">
+        <strong>Mapeamento:</strong>
+        <span>Nome → COLC</span><span>Data → COLE</span><span>Valor → COLG</span><span>Informação Adicional 1 →
+          COLI</span>
+      </div>
+    </section>
+
+    <section class="action-row">
+      <button id="processButton" class="button button-primary" type="button" disabled>
+        Processar arquivos
+      </button>
+      <span id="actionHint">Adicione pelo menos uma planilha para continuar.</span>
+    </section>
+
+    <section id="resultsSection" class="results" hidden aria-labelledby="results-title">
+      <div class="results-heading">
+        <div>
+          <p class="step">3. Resultado</p>
+          <h2 id="results-title">Resumo do processamento</h2>
+        </div>
+        <div class="export-actions">
+          <button id="exportDiscardedButton" class="button button-secondary" type="button">Baixar descartados</button>
+          <button id="exportButton" class="button button-primary" type="button">Baixar CSV consolidado</button>
+        </div>
+      </div>
+
+      <div class="metrics" id="metrics"></div>
+      <div id="sourceExports" class="source-exports"></div>
+
+      <div class="panel preview-panel">
+        <div class="preview-toolbar">
+          <div class="tabs" role="tablist" aria-label="Visualização do resultado">
+            <button class="tab active" id="validTab" role="tab" aria-selected="true" type="button">Válidos</button>
+            <button class="tab" id="discardedTab" role="tab" aria-selected="false" type="button">Descartados</button>
+          </div>
+          <span id="previewCount"></span>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead id="previewHead"></thead>
+            <tbody id="previewBody"></tbody>
+          </table>
+        </div>
+        <p class="preview-footnote">A prévia exibe no máximo 100 registros. O arquivo exportado contém todos os
+          registros processados.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <div class="shell">Odontoart • Ferramenta local para tratamento de bases de campanha</div>
+  </footer>
+
+  <script src="./app.js?v=20260928-1520" defer></script>
+</body>
+
+</html>
