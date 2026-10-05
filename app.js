@@ -114,7 +114,7 @@ function parseHtmlReport(text) {
 
 function detectDelimiter(firstLine) {
   const candidates = [';', ',', '\t'];
-  return candidates.map(d => ({ d, n: firstLine.split(d).length })).sort((a,b) => b.n - a.n)[0].d;
+  return candidates.map(d => ({ d, n: firstLine.split(d).length })).sort((a, b) => b.n - a.n)[0].d;
 }
 
 function parseDelimitedLine(line, delimiter) {
@@ -298,11 +298,47 @@ async function addFiles(fileList) {
   resetResults();
 }
 
+function duplicateKey(row) {
+  // Remove somente a repetição da MESMA cobrança para o MESMO cliente/telefone.
+  // Se o cliente tiver outra cobrança (data, valor ou código de barras diferentes), ela permanece.
+  return [
+    normalizeHeader(row.__source),
+    normalizeHeader(row.COLC),
+    cleanPhone(row.TELEFONE),
+    normalizeText(row.COLE),
+    normalizeText(row[' COLG ']),
+    normalizeText(row.COLI),
+  ].join('|');
+}
+
+function isValidOutputPhone(row) {
+  const phone = cleanPhone(row?.TELEFONE);
+  return phone.length >= CONFIG.minPhoneDigits;
+}
+
+function sanitizeExportRows(rows) {
+  const seen = new Set();
+  const safe = [];
+  for (const row of rows) {
+    const phone = cleanPhone(row?.TELEFONE);
+    if (phone.length < CONFIG.minPhoneDigits) continue;
+    const normalized = { ...row, TELEFONE: phone };
+    const key = duplicateKey(normalized);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    safe.push(normalized);
+  }
+  return safe;
+}
+
 function processFiles() {
   const output = [];
   const discarded = [];
+  const seen = new Set();
   let sourceRows = 0;
   let phonesAnalyzed = 0;
+  let invalidPhones = 0;
+  let duplicatesRemoved = 0;
 
   state.files.forEach(item => {
     sourceRows += item.rows.length;
@@ -313,7 +349,10 @@ function processFiles() {
         if (!original) return;
         phonesAnalyzed++;
         const cleaned = cleanPhone(original);
+
+        // REGRA 1: menos de 11 dígitos nunca segue para a saída.
         if (cleaned.length < CONFIG.minPhoneDigits) {
+          invalidPhones++;
           discarded.push({
             ARQUIVO: item.file.name,
             ORIGEM: item.source,
@@ -326,27 +365,57 @@ function processFiles() {
           });
           return;
         }
+
         const row = buildOutputRow(record, cleaned);
         row.__source = item.source;
         row.__fileName = item.file.name;
+
+        // REGRA 2: elimina a repetição da mesma cobrança/cliente/telefone.
+        const key = duplicateKey(row);
+        if (seen.has(key)) {
+          duplicatesRemoved++;
+          discarded.push({
+            ARQUIVO: item.file.name,
+            ORIGEM: item.source,
+            NOME: name,
+            CAMPO_TELEFONE: phoneField,
+            TELEFONE_ORIGINAL: original,
+            TELEFONE_LIMPO: cleaned,
+            DIGITOS: cleaned.length,
+            MOTIVO: 'Duplicado: mesma cobrança, cliente e telefone',
+          });
+          return;
+        }
+        seen.add(key);
         output.push(row);
       });
     });
   });
 
-  output.sort((a, b) => a.COLC.localeCompare(b.COLC, 'pt-BR', { sensitivity: 'base' }));
+  // Barreira final: mesmo após o processamento, somente telefones >= 11 dígitos permanecem.
+  const safeOutput = sanitizeExportRows(output);
+
+  safeOutput.sort((a, b) => a.COLC.localeCompare(b.COLC, 'pt-BR', { sensitivity: 'base' }));
   discarded.sort((a, b) => a.NOME.localeCompare(b.NOME, 'pt-BR', { sensitivity: 'base' }));
 
   const bySource = new Map();
-  output.forEach(row => {
+  safeOutput.forEach(row => {
     if (!bySource.has(row.__source)) bySource.set(row.__source, []);
     bySource.get(row.__source).push(row);
   });
 
-  state.processed = output;
+  state.processed = safeOutput;
   state.discarded = discarded;
   state.bySource = bySource;
-  state.stats = { files: state.files.length, sourceRows, phonesAnalyzed, valid: output.length, discarded: discarded.length };
+  state.stats = {
+    files: state.files.length,
+    sourceRows,
+    phonesAnalyzed,
+    valid: safeOutput.length,
+    discarded: discarded.length,
+    invalidPhones,
+    duplicatesRemoved,
+  };
   state.activePreview = 'valid';
   renderResults();
 }
@@ -374,7 +443,8 @@ function renderSourceExports() {
         setAlert(`A quantidade de ${source} mudou após o processamento. Processe novamente antes de exportar.`);
         return;
       }
-      downloadText(`${safeFilename(source)}_tratado_${count}.csv`, makeCsv(currentRows));
+      const safeRows = sanitizeExportRows(currentRows);
+      downloadText(`${safeFilename(source)}_tratado_${safeRows.length}.csv`, makeCsv(safeRows));
     });
     els.sourceExports.appendChild(button);
   }
@@ -387,7 +457,8 @@ function renderResults() {
     metric('Registros brutos', state.stats.sourceRows),
     metric('Telefones analisados', state.stats.phonesAnalyzed),
     metric('Telefones válidos', state.stats.valid, 'good'),
-    metric('Descartados', state.stats.discarded, 'bad'),
+    metric('Telefones < 11 dígitos', state.stats.invalidPhones, 'bad'),
+    metric('Duplicados removidos', state.stats.duplicatesRemoved, 'bad'),
   );
   renderSourceExports(); renderPreview();
   els.resultsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -415,14 +486,17 @@ function renderPreview() {
 
 els.fileInput.addEventListener('change', event => { addFiles(event.target.files); event.target.value = ''; });
 els.dropzone.addEventListener('keydown', event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); els.fileInput.click(); } });
-['dragenter','dragover'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.add('dragging'); }));
-['dragleave','drop'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.remove('dragging'); }));
+['dragenter', 'dragover'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.add('dragging'); }));
+['dragleave', 'drop'].forEach(name => els.dropzone.addEventListener(name, event => { event.preventDefault(); els.dropzone.classList.remove('dragging'); }));
 els.dropzone.addEventListener('drop', event => addFiles(event.dataTransfer.files));
 els.clearButton.addEventListener('click', () => { state.files = []; resetResults(); setAlert(''); updateUi(); });
 els.processButton.addEventListener('click', processFiles);
 els.validTab.addEventListener('click', () => { state.activePreview = 'valid'; renderPreview(); });
 els.discardedTab.addEventListener('click', () => { state.activePreview = 'discarded'; renderPreview(); });
-els.exportButton.addEventListener('click', () => downloadText('campanha_consolidada_tratada.csv', makeCsv(state.processed)));
+els.exportButton.addEventListener('click', () => {
+  const safeRows = sanitizeExportRows(state.processed);
+  downloadText(`campanha_consolidada_tratada_${safeRows.length}.csv`, makeCsv(safeRows));
+});
 els.exportDiscardedButton.addEventListener('click', () => downloadText('telefones_descartados.csv', makeDiscardedCsv(state.discarded)));
 
 updateUi();
