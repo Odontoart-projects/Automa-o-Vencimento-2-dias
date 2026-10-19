@@ -59,7 +59,9 @@ function normalizeHeader(value) {
 }
 
 function cleanPhone(value) {
-  return normalizeText(value).replace(/\D/g, '');
+  return normalizeText(value)
+    .replace(/\D/g, '')   // mantém apenas números
+    .replace(/^0+/, '');  // remove zeros à esquerda
 }
 
 function formatDate(value) {
